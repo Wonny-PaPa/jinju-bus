@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#1e293b">
+  <title>진주 버스 타이머</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * {
+      box-sizing: border-box; margin: 0; padding: 0;
+      font-family: 'Pretendard', 'Malgun Gothic', -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background: #f1f5f9; color: #0f172a;
+      padding-bottom: calc(40px + env(safe-area-inset-bottom));
+      overflow-x: hidden;
+    }
+
+    header {
+      background: #1e293b; color: #fff; padding: 12px 14px;
+      display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; z-index: 1000;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    .app-title {
+      font-size: 1.02rem; font-weight: 900; letter-spacing: -0.3px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .clock-bar {
+      background: #0f172a; color: #38bdf8; padding: 8px 14px;
+      font-weight: bold; display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.84rem;
+    }
+    .container { max-width: 680px; margin: 0 auto; padding: 10px; }
+
+    .btn {
+      border: none; border-radius: 8px; padding: 8px 11px;
+      font-weight: 800; cursor: pointer; font-size: 0.82rem; transition: 0.12s;
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      text-decoration: none; user-select: none;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-naver { background: #03c75a; color: #fff; }
+    .btn-blue { background: #2563eb; color: #fff; }
+    .btn-gray { background: #475569; color: #fff; }
+
+    .card {
+      background: #fff; border-radius: 14px; padding: 14px;
+      margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+    }
+
+    .route-finder {
+      background: #ffffff; border-radius: 14px; padding: 13px;
+      margin-bottom: 12px; border: 2px solid #03c75a;
+      box-shadow: 0 4px 12px rgba(3, 199, 90, 0.12);
+    }
+    .point-box { position: relative; margin-bottom: 8px; }
+    .point-label {
+      display: inline-block; width: 42px; font-weight: 900; font-size: 0.8rem;
+      text-align: center; padding: 6px 0; border-radius: 6px; margin-right: 6px; flex-shrink: 0;
+    }
+    .label-start { background: #dcfce7; color: #15803d; }
+    .label-end { background: #fee2e2; color: #b91c1c; }
+
+    .point-input-wrap { display: flex; align-items: center; }
+    .input {
+      width: 100%; padding: 10px 11px; border: 1px solid #cbd5e1;
+      border-radius: 8px; font-size: 16px; outline: none; background: #fff;
+    }
+    .input:focus { border-color: #03c75a; }
+
+    .dropdown-list {
+      max-height: 220px; overflow-y: auto; border: 2px solid #03c75a;
+      border-radius: 8px; margin-top: 6px; background: #fff;
+      display: none; position: relative; z-index: 500;
+      -webkit-overflow-scrolling: touch;
+    }
+    .dropdown-list.open { display: block; }
+    .stop-option {
+      padding: 11px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center; font-size: 0.88rem;
+    }
+    .stop-option:active { background: #dcfce7; }
+
+    .selected-pill {
+      margin-top: 6px; margin-left: 48px; padding: 8px 10px; background: #f8fafc;
+      border: 1px solid #94a3b8; border-radius: 8px; font-size: 0.85rem;
+      display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    }
+
+    .saved-routes {
+      display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .route-chip {
+      background: #e2e8f0; color: #1e293b; border-radius: 20px;
+      padding: 7px 12px; font-size: 0.8rem; font-weight: bold;
+      cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    .chip-del { color: #ef4444; font-weight: 900; padding: 0 2px; }
+
+    .walk-bar {
+      background: #eff6ff; border: 1px solid #bfdbfe; padding: 10px 12px;
+      border-radius: 10px; margin-top: 10px; font-size: 0.85rem; font-weight: bold; color: #1e40af;
+    }
+    .walk-bar-top {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;
+      margin-bottom: 8px;
+    }
+    .walk-bar input {
+      width: 48px; padding: 4px; text-align: center; font-weight: 900;
+      border: 1px solid #93c5fd; border-radius: 6px; font-size: 16px; background: #fff;
+    }
+    .action-btn-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    }
+
+    #mapCard { display: none; }
+    #routeMap {
+      width: 100%; height: 290px; border-radius: 10px;
+      border: 2px solid #cbd5e1; z-index: 10; background: #e2e8f0;
+    }
+    .map-top-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px; flex-wrap: wrap; gap: 6px;
+    }
+    .route-step-bar {
+      margin-top: 8px; padding: 9px 11px; background: #f8fafc;
+      border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 0.8rem; color: #334155; line-height: 1.5;
+      max-height: 120px; overflow-y: auto;
+    }
+
+    .bus-row {
+      border: 2px solid #cbd5e1; border-radius: 12px; padding: 12px; margin-bottom: 10px;
+      background: #fff; cursor: pointer; transition: 0.12s;
+    }
+    .bus-row.active-selected { outline: 3px solid #2563eb; }
+    .bus-row.direct-highlight { border: 2.5px solid #03c75a; background: #f0fdf4; }
+    .bus-row.urgent { background: #fef2f2; border-color: #f87171; }
+    .bus-row.ready { background: #fefce8; border-color: #facc15; }
+    .bus-row.relax { background: #f0fdf4; border-color: #86efac; }
+    .bus-row.missed { background: #f8fafc; border-color: #cbd5e1; opacity: 0.65; }
+
+    .direct-badge {
+      background: #03c75a; color: #fff; font-size: 0.74rem; padding: 3px 7px;
+      border-radius: 6px; font-weight: 900;
+    }
+    .timetable-badge {
+      background: #ede9fe; color: #6d28d9; border: 1px solid #c4b5fd;
+      font-size: 0.72rem; padding: 2px 6px; border-radius: 6px; font-weight: 800;
+    }
+
+    .transfer-flow {
+      display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+      background: #fff7ed; border: 1px solid #fdba74; padding: 9px 10px;
+      border-radius: 8px; margin-top: 8px; font-size: 0.82rem; font-weight: bold; color: #7c2d12;
+      line-height: 1.45;
+    }
+    .transfer-badge {
+      background: #ea580c; color: #fff; font-size: 0.74rem; padding: 3px 7px;
+      border-radius: 6px; font-weight: 900;
+    }
+    .transfer-hub-pill {
+      background: #fef08a; color: #854d0e; border: 1px solid #facc15;
+      padding: 2px 6px; border-radius: 5px; font-weight: 900;
+    }
+    .bus2-pill {
+      background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;
+      padding: 2px 6px; border-radius: 5px; font-weight: 900;
+    }
+
+    .time-grid-3 {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+      background: rgba(255,255,255,0.96); padding: 9px 8px; border-radius: 10px;
+      margin-top: 8px; border: 1px solid #cbd5e1;
+    }
+    .time-grid-2 {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+      background: rgba(255,255,255,0.96); padding: 10px; border-radius: 10px;
+      margin-top: 8px; border: 1px solid #cbd5e1;
+    }
+    .t-box { padding: 4px 5px; border-radius: 6px; text-align: center; }
+    .t-box-dest { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .t-label { font-size: 0.7rem; color: #64748b; font-weight: 800; letter-spacing: -0.3px; }
+    .t-val { font-size: 0.92rem; font-weight: 900; margin-top: 3px; color: #0f172a; letter-spacing: -0.5px; }
+    .t-sub { font-size: 0.68rem; color: #334155; font-weight: bold; margin-top: 2px; letter-spacing: -0.3px; }
+
+    .section-divider {
+      font-size: 0.92rem; font-weight: 900; color: #1e293b;
+      margin: 12px 0 8px 0; padding-bottom: 5px; border-bottom: 2px solid #e2e8f0;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px;
+    }
+
+    .empty-msg { padding: 18px 10px; text-align: center; color: #475569; font-weight: bold; font-size: 0.86rem; line-height: 1.5; }
+
+    :root {
+      --ink:#17253c; --sub:#66758d; --line:#e2eaf2;
+      --soft:#f4f7fb; --primary:#2563eb; --primaryDeep:#1749c6;
+      --green:#03b96a; --greenDeep:#009e58;
+      --shadow:0 12px 32px rgba(26,46,78,.065),0 2px 7px rgba(26,46,78,.035);
+    }
+    html { background:#f3f6fb; scroll-behavior:smooth; }
+    body {
+      background:linear-gradient(180deg,#eef4ff 0px,#f5f7fc 280px,#f7f9fc 680px);
+      color:var(--ink); font-size:14px; line-height:1.5;
+      -webkit-font-smoothing:antialiased;
+    }
+    header {
+      background:rgba(15,30,55,.97); padding:15px max(14px,calc((100vw - 720px)/2 + 16px));
+      border-bottom:1px solid rgba(255,255,255,.09);
+      box-shadow:0 4px 22px rgba(17,33,60,.15);
+      gap:10px; backdrop-filter:blur(14px);
+    }
+    .app-title { font-size:1.04rem; font-weight:900; letter-spacing:-.6px; }
+    header .btn { font-size:.76rem; padding:8px 10px; }
+    .clock-bar {
+      background:#152540; color:#c8ddff; padding:9px max(14px,calc((100vw - 720px)/2 + 16px));
+      font-size:.78rem; font-weight:750; border-top:1px solid rgba(255,255,255,.055);
+    }
+    .container { max-width:720px; padding:16px 12px 36px; }
+    .card, .route-finder {
+      background:rgba(255,255,255,.98); border:1px solid var(--line);
+      border-radius:19px; box-shadow:var(--shadow); margin-bottom:15px;
+    }
+    .card { padding:16px; }
+    .route-finder { padding:17px; border-color:#d7e5f4; box-shadow:var(--shadow); }
+    .point-box { margin-bottom:12px; }
+    .point-input-wrap { gap:10px; }
+    .point-label {
+      width:47px; height:41px; display:inline-flex; align-items:center; justify-content:center;
+      padding:0; margin:0; font-size:.78rem; border-radius:11px; letter-spacing:-.4px;
+    }
+    .label-start { background:#dcf8eb; color:#008449; }
+    .label-end { background:#ffe8e8; color:#cc3e4a; }
+    .input {
+      min-width:0; height:45px; border-radius:11px; border:1px solid #dbe4ef;
+      background:#f9fbfd; color:var(--ink); padding:11px 13px;
+      box-shadow:inset 0 1px 2px rgba(23,37,60,.025);
+    }
+    .input::placeholder { color:#98a4b5; font-weight:500; }
+    .input:focus { background:#fff; border-color:#60a5fa; box-shadow:0 0 0 3px rgba(37,99,235,.11); }
+    .dropdown-list { border:1px solid #cddcf0; border-radius:12px; box-shadow:0 10px 24px rgba(20,40,70,.09); }
+    .stop-option { padding:12px 13px; border-color:#eef3f8; }
+    .stop-option:hover { background:#f4f9ff; }
+    .selected-pill {
+      margin:8px 0 0 57px; padding:10px 11px; background:#f5f9fe;
+      border:1px solid #deebf8; border-radius:11px; color:#2b4059; line-height:1.5;
+    }
+    .btn {
+      border-radius:10px; min-height:35px; padding:9px 12px;
+      font-weight:850; letter-spacing:-.2px;
+      transition:transform .13s,filter .13s,box-shadow .13s;
+    }
+    .btn:hover { filter:brightness(1.04); }
+    .btn:focus-visible, .route-chip:focus-visible, .bus-row:focus-visible {
+      outline:3px solid #93c5fd; outline-offset:3px;
+    }
+    .btn-blue { background:linear-gradient(125deg,#3269f5,#1d4ed8); box-shadow:0 3px 8px rgba(37,99,235,.13); }
+    .btn-naver { background:linear-gradient(125deg,#06c973,#00ae61); box-shadow:0 3px 8px rgba(3,185,106,.1); }
+    .btn-gray { background:#344763; }
+    .walk-bar {
+      background:linear-gradient(125deg,#f1f6ff,#eaf4ff); border:1px solid #d5e5fb;
+      border-radius:14px; padding:13px 12px; margin-top:15px; color:#214b92;
+    }
+    .walk-bar-top { gap:8px; margin-bottom:11px; }
+    .walk-bar-top > span { font-weight:600; line-height:1.4; }
+    .walk-bar input {
+      border:1px solid #c2d7f5; border-radius:8px; height:33px; width:54px;
+      background:#fff; color:#1c4e98;
+    }
+    .action-btn-grid { gap:9px; }
+    .action-btn-grid .btn { min-height:45px; border-radius:11px; font-weight:900; }
+    .saved-routes { gap:8px; margin-bottom:13px; padding:2px 2px 6px; }
+    .route-chip {
+      padding:9px 13px; background:#fff; border:1px solid #dce6f1;
+      box-shadow:0 2px 6px rgba(20,35,60,.045); border-radius:100px;
+      color:#29415c; font-size:.78rem;
+    }
+    .route-chip:hover { background:#f4f8fe; }
+    .section-divider {
+      color:#203550; font-size:.92rem; margin:18px 1px 10px;
+      border-bottom:1px solid #dfe7f1; padding:0 1px 9px;
+    }
+    .bus-row {
+      border:1px solid #e0e8f2; border-left:4px solid #c7d5e7;
+      border-radius:16px; padding:14px; margin-bottom:10px;
+      box-shadow:0 3px 10px rgba(26,46,78,.04); line-height:1.55;
+    }
+    .bus-row:hover { box-shadow:0 7px 18px rgba(26,46,78,.09); }
+    .bus-row.active-selected { outline:2px solid #3b82f6; outline-offset:1px; }
+    .bus-row.direct-highlight { border:1px solid #9de9c1; border-left:4px solid #0db96e; background:#f4fdf8; }
+    .bus-row.urgent { background:#fff7f7; border-color:#ffb5b5; border-left-color:#ee6671; }
+    .bus-row.ready { background:#fffdf5; border-color:#f3d888; border-left-color:#e6b22b; }
+    .bus-row.relax { background:#f6fdf8; border-color:#a7e6c0; border-left-color:#40bd79; }
+    .bus-row.missed { background:#f5f7fa; border-color:#dce3ec; opacity:.78; }
+    .direct-badge { background:#0db76a; border-radius:7px; }
+    .timetable-badge { border-radius:7px; }
+    .transfer-flow {
+      border-radius:11px; background:#fff9f0; border:1px solid #ffe3b5;
+      padding:11px; margin-top:11px; line-height:1.55;
+    }
+    .transfer-badge { border-radius:7px; }
+    .transfer-hub-pill, .bus2-pill { border-radius:6px; }
+    .time-grid-2,.time-grid-3 {
+      border:1px solid #e2eaf5; background:#f8fbff; border-radius:12px;
+      gap:7px; padding:10px 8px; margin-top:12px;
+    }
+    .t-box { padding:7px 4px; }
+    .t-box-dest { background:#eaf3ff; border-color:#cfe1ff; border-radius:9px; }
+    .t-label { color:#687a94; font-size:.69rem; }
+    .t-val { color:#152e51; font-size:1rem; letter-spacing:-.6px; }
+    .t-sub { color:#50647e; font-size:.67rem; }
+    #mapCard { padding:16px; }
+    .map-top-bar { gap:10px; padding:1px 0 11px; margin-bottom:4px; }
+    #mapRouteTitle { font-size:.96rem !important; letter-spacing:-.4px; }
+    .map-top-bar .btn { font-size:.76rem; }
+    #routeMap { border:1px solid #e1e9f3; border-radius:13px; }
+    #naverRoutePanel {
+      padding:23px 17px !important; border-radius:15px !important;
+      border:1px solid #cbecdd !important;
+      background:linear-gradient(150deg,#f3fff9,#e9f9f1) !important;
+    }
+    #naverRoutePanel > div:first-child { color:#087f4b !important; letter-spacing:-.5px; }
+    #naverRoutePanel .btn { min-height:48px; border-radius:12px; }
+    .route-step-bar {
+      padding:11px 12px; border-radius:11px; margin-top:11px;
+      background:#f6f8fc; border:1px solid #e5ebf3; color:#61728a;
+    }
+    .empty-msg { color:#77869a; padding:22px 12px; }
+    @media (max-width:480px) {
+      header { padding:12px 11px; }
+      header .app-title { font-size:.88rem; }
+      header .btn { padding:7px 8px; font-size:.69rem; }
+      header > div:last-child { gap:4px !important; }
+      .clock-bar { padding:8px 12px; font-size:.73rem; }
+      .container { padding:12px 9px 26px; }
+      .route-finder { padding:13px 11px; border-radius:16px; }
+      .card { padding:13px 12px; border-radius:16px; }
+      .point-label { width:41px; font-size:.75rem; }
+      .point-input-wrap { gap:7px; }
+      .selected-pill { margin-left:48px; }
+      .walk-bar { padding:11px 9px; }
+      .action-btn-grid { gap:6px; }
+      .action-btn-grid .btn { font-size:.76rem !important; padding:10px 5px !important; }
+      .bus-row { padding:12px 11px; }
+      .time-grid-3 { gap:4px; padding:7px 5px; }
+      .t-label { font-size:.65rem; }
+      .t-val { font-size:.9rem; }
+      .t-sub { font-size:.63rem; }
+      #naverRoutePanel { padding:18px 11px !important; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      *,*::before,*::after { transition:none !important; scroll-behavior:auto !important; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="app-title">🚌 진주 버스 출발·도착 계산기</div>
+  <div style="display:flex; gap:5px; flex-shrink:0;">
+    <button class="btn btn-naver" onclick="executeRouteSearch(false)">🔄 새로고침</button>
+    <button class="btn btn-gray" style="display:none;" onclick="toggleKeyModal()">🔑 키설정</button>
+  </div>
+</header>
+
+<div class="clock-bar">
+  <span id="clockTxt">현재 시각: --:--:--</span>
+  <span id="updateTxt" style="font-size:0.75rem; color:#94a3b8;">대기 중</span>
+</div>
+
+<div class="container">
+
+  <div id="keyModal" class="card" style="display:none; border:2px solid #2563eb;">
+    <div style="font-weight:900; margin-bottom:8px; font-size:0.9rem;">🔑 공공데이터포털 일반 인증키 설정</div>
+    <div style="display:flex; gap:6px;">
+      <input type="text" id="apiKeyInp" class="input" placeholder="인증키 입력">
+      <button class="btn btn-blue" style="white-space:nowrap;" onclick="saveKeyAndInit()">저장 & 로드</button>
+    </div>
+    <div id="loadStateTxt" style="font-size:0.8rem; color:#2563eb; font-weight:bold; margin-top:8px;"></div>
+  </div>
+
+  <div id="savedRoutesBar" class="saved-routes"></div>
+
+  <div class="route-finder">
+    <div class="point-box">
+      <div class="point-input-wrap">
+        <span class="point-label label-start">출발</span>
+        <input type="text" id="startSearchInp" class="input" placeholder="출발 정류장 검색 (예: 풀에버정문)" onfocus="openDropdown('start')" oninput="renderDropdown('start')">
+      </div>
+      <div id="startSelectedBox"></div>
+      <div id="startDropdown" class="dropdown-list"></div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin: 6px 0 6px 48px;">
+      <button class="btn" style="background:#f1f5f9; border:1px solid #cbd5e1; font-size:0.76rem; padding:5px 9px; color:#1e293b;" onclick="swapStartEnd()">⇅ 출발 ↔ 도착</button>
+      <button class="btn" style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; font-size:0.76rem; padding:5px 9px;" onclick="saveCurrentCourse()">⭐ 즐겨찾기 저장</button>
+    </div>
+
+    <div class="point-box" style="margin-bottom:0;">
+      <div class="point-input-wrap">
+        <span class="point-label label-end">도착</span>
+        <input type="text" id="endSearchInp" class="input" placeholder="도착 정류장 검색 (예: 진주남중학교)" onfocus="openDropdown('end')" oninput="renderDropdown('end')">
+      </div>
+      <div id="endSelectedBox"></div>
+      <div id="endDropdown" class="dropdown-list"></div>
+    </div>
+
+    <div class="walk-bar">
+      <div class="walk-bar-top">
+        <div>
+          🚶 도보 <input type="number" id="walkMinInp" min="0" max="60" value="5" oninput="updateWalkMin(this.value)"> 분
+        </div>
+        <span style="color:#334155; font-size:0.8rem;">(+ 여유 2분 = <strong>도착 <span id="totalPrepTxt">7</span>분 전</strong> 집 출발)</span>
+      </div>
+      <div class="action-btn-grid">
+        <button class="btn btn-blue" style="padding:10px 8px; font-size:0.86rem;" onclick="executeRouteSearch(false)">🔍 직통 + 환승 조회</button>
+        <button class="btn btn-naver" style="padding:10px 8px; font-size:0.86rem;" onclick="openNaverDirections(false)">🗺️ 네이버지도 앱 열기</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="resultBox"></div>
+
+  <div id="mapCard" class="card">
+    <div class="map-top-bar">
+      <div id="mapRouteTitle" style="font-weight:900; font-size:0.9rem; color:#0f172a;">🗺️ 버스 노선별 실제 이동 경로</div>
+      <button class="btn btn-naver" style="padding:5px 10px; font-size:0.76rem;" onclick="openNaverDirections(true)">
+        ↗ 네이버 지도 앱 연동
+      </button>
+    </div>
+    <div id="routeMap" style="display:none;"></div>
+    <div id="naverRoutePanel" style="padding:22px 14px; border:1px solid #bbf7d0; border-radius:12px; background:#f0fdf4; text-align:center;">
+      <div style="font-size:1.08rem;font-weight:900;color:#166534;margin-bottom:8px;">🗺️ 네이버지도에서 실제 대중교통 경로 확인</div>
+      <div id="naverRouteSelection" style="font-size:0.84rem;line-height:1.6;color:#334155;margin-bottom:12px;"></div>
+      <button class="btn btn-naver" style="width:100%;font-size:0.95rem;padding:13px 10px;" onclick="openNaverDirections(true)">↗ 네이버지도 대중교통 길찾기 열기</button>
+      <div style="font-size:0.76rem;color:#64748b;line-height:1.5;margin-top:10px;">네이버지도에서 실제 추천 노선과 운행 경로를 확인하세요. 앱에서 선택한 버스 번호가 네이버지도에 자동 지정되지는 않습니다.</div>
+    </div>
+    <div id="routeStepBar" class="route-step-bar">
+      💡 위 목록에서 각 버스 카드를 터치하면 해당 버스의 고유 이동 경로와 환승지가 지도에 표시됩니다.
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BASE_URL = "https://apis.data.go.kr/5310000/jinjubus";
+  const BUFFER_MIN = 2;
+
+  let apiKey = localStorage.getItem("jinju_bus_key") || localStorage.getItem("jinju_api_key") || "886a961f749170c4d98e505e761ff3f081e7e8413b47101804b421ffac2f3200";
+  let allStops = JSON.parse(localStorage.getItem("jinju_all_stops") || localStorage.getItem("jinju_all_stops_v2") || "[]");
+  let routeStopsCache = JSON.parse(localStorage.getItem("jinju_route_stops_v6") || "{}");
+
+  let startStop = JSON.parse(localStorage.getItem("jinju_cur_start") || "null");
+  let endStop = JSON.parse(localStorage.getItem("jinju_cur_end") || "null");
+  let walkMin = parseInt(localStorage.getItem("jinju_walk_min") || "5");
+  let savedCourses = JSON.parse(localStorage.getItem("jinju_saved_courses") || "[]");
+
+  let latestArrivalData = null;
+  let scheduledDirectBuses = [];
+  let transferOptions = [];
+  let selectedCardKey = "";
+
+  const ROUTE_SPECIFIC_PROFILES = {
+    "150": {
+      corridorName: "남강교 · 초전/말티고개 · 시외버스터미널 경유",
+      hubName: "시외버스터미널/동방호텔",
+      hubLat: 35.1924, hubLon: 128.0848,
+      bus2List: ["120", "130", "131", "250", "251", "350"],
+      leg1Waypoints: [
+        { name: "종합경기장/남강교", lat: 35.1843, lon: 128.1365 },
+        { name: "하대동/선학사거리", lat: 35.1905, lon: 128.1185 },
+        { name: "말티고개/장대동", lat: 35.1942, lon: 128.0960 }
+      ],
+      leg1StopNames: ["출발지", "충무공동주민센터", "종합경기장(남강교)", "하대동", "말티고개", "시외버스터미널/동방호텔(환승)"],
+      leg1Min: 16, waitMin: 5, leg2Min: 7, color: "#0284c7"
+    },
+    "150-1": {
+      corridorName: "남강교 · 하대동 · 시외버스터미널 경유",
+      hubName: "시외버스터미널/동방호텔",
+      hubLat: 35.1924, hubLon: 128.0848,
+      bus2List: ["120", "130", "131", "250", "251", "350"],
+      leg1Waypoints: [
+        { name: "종합경기장/남강교", lat: 35.1843, lon: 128.1365 },
+        { name: "하대동/선학사거리", lat: 35.1905, lon: 128.1185 },
+        { name: "말티고개/장대동", lat: 35.1942, lon: 128.0960 }
+      ],
+      leg1StopNames: ["출발지", "종합경기장(남강교)", "하대동", "말티고개", "시외버스터미널/동방호텔(환승)"],
+      leg1Min: 16, waitMin: 5, leg2Min: 7, color: "#0284c7"
+    },
+    "200": {
+      corridorName: "문산 · 개양오거리 · 고속버스터미널 경유",
+      hubName: "고속버스터미널",
+      hubLat: 35.1795, hubLon: 128.0954,
+      bus2List: ["120", "130", "131", "132", "251", "350"],
+      leg1Waypoints: [
+        { name: "혁신도시남측/영천강", lat: 35.1688, lon: 128.1310 },
+        { name: "개양오거리/가좌동", lat: 35.1618, lon: 128.1055 },
+        { name: "연암공대/가호동", lat: 35.1705, lon: 128.0992 }
+      ],
+      leg1StopNames: ["출발지", "영천강교", "개양오거리", "연암공대", "고속버스터미널(환승)"],
+      leg1Min: 13, waitMin: 5, leg2Min: 8, color: "#7c3aed"
+    },
+    "292": {
+      corridorName: "김시민대교 · 공단로 · 한주럭키타운 경유",
+      hubName: "한주럭키타운/공단광장",
+      hubLat: 35.1782, hubLon: 128.1088,
+      bus2List: ["130", "131", "251", "300", "301", "350", "380"],
+      leg1Waypoints: [
+        { name: "김시민대교", lat: 35.1775, lon: 128.1285 },
+        { name: "상평공단/한일병원", lat: 35.1778, lon: 128.1175 }
+      ],
+      leg1StopNames: ["출발지", "김시민대교", "한일병원", "상평공단", "한주럭키타운/공단광장(환승)"],
+      leg1Min: 9, waitMin: 5, leg2Min: 10, color: "#059669"
+    },
+    "290": {
+      corridorName: "김시민대교 · 진주시청 · 자유시장 경유",
+      hubName: "진주시청",
+      hubLat: 35.1803, hubLon: 128.1082,
+      bus2List: ["130", "131", "251", "300", "301", "380"],
+      leg1Waypoints: [
+        { name: "김시민대교", lat: 35.1775, lon: 128.1285 },
+        { name: "진주시청사거리", lat: 35.1803, lon: 128.1120 }
+      ],
+      leg1StopNames: ["출발지", "김시민대교", "상평동", "진주시청(환승)"],
+      leg1Min: 10, waitMin: 5, leg2Min: 10, color: "#0d9488"
+    },
+    "300": {
+      corridorName: "김시민대교 · 공단광장 · 진주교 경유",
+      hubName: "진주교/시외버스터미널",
+      hubLat: 35.1892, hubLon: 128.0865,
+      bus2List: ["120", "130", "250", "251", "350", "380"],
+      leg1Waypoints: [
+        { name: "김시민대교", lat: 35.1775, lon: 128.1285 },
+        { name: "공단광장/자유시장", lat: 35.1825, lon: 128.1035 },
+        { name: "시외버스터미널", lat: 35.1892, lon: 128.0865 }
+      ],
+      leg1StopNames: ["출발지", "김시민대교", "한일병원", "공단광장", "자유시장", "시외버스터미널(환승)"],
+      leg1Min: 15, waitMin: 4, leg2Min: 6, color: "#2563eb"
+    },
+    "301": {
+      corridorName: "김시민대교 · 공단광장 · 진주교 경유",
+      hubName: "진주교/시외버스터미널",
+      hubLat: 35.1892, hubLon: 128.0865,
+      bus2List: ["120", "130", "250", "251", "350", "380"],
+      leg1Waypoints: [
+        { name: "김시민대교", lat: 35.1775, lon: 128.1285 },
+        { name: "공단광장/자유시장", lat: 35.1825, lon: 128.1035 },
+        { name: "시외버스터미널", lat: 35.1892, lon: 128.0865 }
+      ],
+      leg1StopNames: ["출발지", "김시민대교", "한일병원", "공단광장", "자유시장", "시외버스터미널(환승)"],
+      leg1Min: 15, waitMin: 4, leg2Min: 6, color: "#2563eb"
+    },
+    "380": {
+      corridorName: "김시민대교 · 한주럭키타운 · 고속터미널 · 제일병원 직통",
+      directWaypoints: [
+        { name: "김시민대교", lat: 35.1775, lon: 128.1285 },
+        { name: "한일병원/상평동", lat: 35.1778, lon: 128.1175 },
+        { name: "한주럭키타운/공단광장", lat: 35.1782, lon: 128.1088 },
+        { name: "고속버스터미널/진주교", lat: 35.1795, lon: 128.0954 }
+      ],
+      directStopNames: ["출발지", "LH1단지", "김시민대교", "한일병원", "한주럭키타운", "공단광장", "고속버스터미널", "경남과기대", "진주남중학교/제일병원(도착)"],
+      color: "#03c75a"
+    },
+    "381": {
+      corridorName: "혁신도시 · 김시민대교 · 고속터미널 · 제일병원 직통",
+      directWaypoints: [
+        { name: "김시민대교", lat: 35.1775, lon: 128.1285 },
+        { name: "공단광장", lat: 35.1782, lon: 128.1088 },
+        { name: "고속버스터미널", lat: 35.1795, lon: 128.0954 }
+      ],
+      directStopNames: ["출발지", "김시민대교", "한일병원", "공단광장", "고속버스터미널", "진주남중학교/제일병원(도착)"],
+      color: "#059669"
+    }
+  };
+
+  const JINJU_DIRECT_RULES = [
+    {
+      fromKeys: ["풀에버", "대곡중", "부영11", "중흥12", "중흥S", "한림풀에버", "LH", "충무공", "혁신", "승강기", "나래공원"],
+      toKeys: ["진주남중", "제일병원", "고속버스터미널", "시외버스터미널", "갤러리아", "중앙시장", "진주시청", "자유시장", "천전", "망경", "강남"],
+      directRoutes: [
+        { routeNo: "380", suptNo: "0", drctNm: "판문동차고지/제일병원 방면", startOffsetMin: 12, travelStops: 14, travelMin: 20 },
+        { routeNo: "381", suptNo: "0", drctNm: "제일병원/판문동 방면", startOffsetMin: 12, travelStops: 14, travelMin: 20 }
+      ]
+    },
+    {
+      fromKeys: ["진주남중", "제일병원", "고속버스터미널", "시외버스터미널", "갤러리아", "중앙시장", "진주시청"],
+      toKeys: ["풀에버", "대곡중", "부영11", "중흥12", "중흥S", "한림풀에버", "LH", "충무공", "혁신", "승강기"],
+      directRoutes: [
+        { routeNo: "380", suptNo: "0", drctNm: "충무공동/공영차고지 방면", startOffsetMin: 18, travelStops: 14, travelMin: 20 },
+        { routeNo: "381", suptNo: "0", drctNm: "충무공동 방면", startOffsetMin: 18, travelStops: 14, travelMin: 20 }
+      ]
+    }
+  ];
+
+  window.onload = async () => {
+    document.getElementById("apiKeyInp").value = apiKey;
+    document.getElementById("walkMinInp").value = walkMin;
+    document.getElementById("totalPrepTxt").textContent = walkMin + BUFFER_MIN;
+
+    updateClock();
+    renderSelectedBoxes();
+    renderSavedCourses();
+
+    if (!apiKey || allStops.length === 0) {
+      if (apiKey) await loadMasterData();
+      else document.getElementById("keyModal").style.display = "block";
+    } else {
+      document.getElementById("loadStateTxt").textContent = `✅ 진주시 전체 정류장 ${allStops.length}개 준비 완료`;
+    }
+
+    if (apiKey && startStop) {
+      executeRouteSearch(false);
+    } else {
+      renderResults();
+    }
+
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".point-box")) {
+        document.getElementById("startDropdown").classList.remove("open");
+        document.getElementById("endDropdown").classList.remove("open");
+      }
+    });
+
+    setInterval(() => {
+      updateClock();
+      if (latestArrivalData) renderResults();
+    }, 1000);
+
+    setInterval(() => {
+      if (apiKey && startStop) fetchArrivalsAndTransfers();
+    }, 25000);
+  };
+
+  function getKeyParam() {
+    const k = apiKey.trim();
+    return k.includes("%") ? k : encodeURIComponent(k);
+  }
+
+  async function fetchWithTimeout(url, timeoutMs = 8500) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      return JSON.parse(text);
+    } catch (e) {
+      clearTimeout(timer);
+      throw e;
+    }
+  }
+
+  async function safeFetchJson(endpoint, paramsObj = {}) {
+    const qs = new URLSearchParams(paramsObj).toString();
+    const targetUrl = `${BASE_URL}/${endpoint}?serviceKey=${getKeyParam()}${qs ? '&' + qs : ''}`;
+    const httpFallbackUrl = targetUrl.replace(/^https:\/\//i, "http://");
+
+    const attempts = [
+      { url: targetUrl, timeout: 7500 },
+      { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`, timeout: 8500 },
+      { url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`, timeout: 8500 },
+      { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`, timeout: 9500 },
+      { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(httpFallbackUrl)}`, timeout: 9500 }
+    ];
+
+    let lastErr = null;
+    for (const item of attempts) {
+      try {
+        const data = await fetchWithTimeout(item.url, item.timeout);
+        if (data && typeof data === "object") return data;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("API 연결 시간 초과");
+  }
+
+  function fmtClock(d) {
+    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  }
+
+  function fmtMMSS(sec) {
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60), r = s % 60;
+    return m > 0 ? m + "분 " + r + "초" : r + "초";
+  }
+
+  function updateClock() {
+    document.getElementById("clockTxt").textContent = "현재 시각: " + fmtClock(new Date());
+  }
+
+  function toggleKeyModal() {
+    const m = document.getElementById("keyModal");
+    m.style.display = m.style.display === "none" ? "block" : "none";
+  }
+
+  async function saveKeyAndInit() {
+    apiKey = document.getElementById("apiKeyInp").value.trim();
+    if (!apiKey) {
+      alert("인증키를 입력해 주세요!");
+      return;
+    }
+    localStorage.setItem("jinju_bus_key", apiKey);
+    await loadMasterData();
+  }
+
+  async function loadMasterData() {
+    const stTxt = document.getElementById("loadStateTxt");
+    stTxt.textContent = "⏳ 진주시 전체 정류장(1,992개) 목록을 불러오는 중입니다...";
+    try {
+      const data = await safeFetchJson("getBstaList");
+      if (data.bstaAll && Array.isArray(data.bstaAll)) {
+        allStops = data.bstaAll.sort((a, b) => (a.bstaNm || "").localeCompare(b.bstaNm || "", "ko"));
+        localStorage.setItem("jinju_all_stops", JSON.stringify(allStops));
+        stTxt.textContent = `✅ 진주시 전체 정류장 ${allStops.length}개 로드 완료!`;
+        setTimeout(() => { document.getElementById("keyModal").style.display = "none"; }, 600);
+      } else {
+        stTxt.textContent = "⚠️ 정류장 데이터를 가져오지 못했습니다. 인증키를 확인해 주세요.";
+      }
+    } catch (e) {
+      stTxt.textContent = "⚠️ API 호출 실패. 인터넷 연결 또는 인증키를 확인해 주세요.";
+    }
+  }
+
+  function openDropdown(type) {
+    if (allStops.length === 0) {
+      loadMasterData();
+    }
+    document.getElementById(type === 'start' ? 'endDropdown' : 'startDropdown').classList.remove("open");
+    renderDropdown(type);
+    document.getElementById(type + "Dropdown").classList.add("open");
+  }
+
+  function renderDropdown(type) {
+    const inp = document.getElementById(type + "SearchInp");
+    const box = document.getElementById(type + "Dropdown");
+    const q = inp.value.trim();
+
+    let list = q
+      ? allStops.filter(s => (s.bstaNm || "").includes(q) || (s.rmrk || "").includes(q) || String(s.bstaSrvcId).includes(q))
+      : allStops;
+
+    list = list.slice(0, 250);
+
+    if (list.length === 0) {
+      box.innerHTML = `<div class="stop-option">일치하는 정류장이 없습니다.</div>`;
+      return;
+    }
+
+    box.innerHTML = list.map(s => `
+      <div class="stop-option" onclick="selectStop('${type}', ${s.bstaSrvcId})">
+        <div>
+          <strong>${s.bstaNm}</strong>
+          <span style="color:#2563eb; font-size:0.78rem; font-weight:bold; margin-left:4px;">(${s.rmrk || '방향없음'} 방면)</span>
+        </div>
+        <span style="color:#94a3b8; font-size:0.74rem;">#${s.bstaSrvcId}</span>
+      </div>
+    `).join("");
+  }
+
+  function selectStop(type, bstaSrvcId) {
+    const found = allStops.find(s => Number(s.bstaSrvcId) === Number(bstaSrvcId));
+    if (!found) return;
+
+    const stopObj = {
+      bstaSrvcId: Number(found.bstaSrvcId),
+      bstaNm: found.bstaNm,
+      rmrk: (found.rmrk || "방향없음") + " 방면",
+      lttd: Number(found.lttd),
+      lgtd: Number(found.lgtd)
+    };
+
+    if (type === "start") {
+      startStop = stopObj;
+      localStorage.setItem("jinju_cur_start", JSON.stringify(startStop));
+      document.getElementById("startSearchInp").value = "";
+      document.getElementById("startDropdown").classList.remove("open");
+    } else {
+      endStop = stopObj;
+      localStorage.setItem("jinju_cur_end", JSON.stringify(endStop));
+      document.getElementById("endSearchInp").value = "";
+      document.getElementById("endDropdown").classList.remove("open");
+    }
+
+    renderSelectedBoxes();
+    if (startStop) executeRouteSearch(false);
+  }
+
+  function clearStop(type) {
+    if (type === "start") {
+      startStop = null;
+      localStorage.removeItem("jinju_cur_start");
+      latestArrivalData = null;
+      scheduledDirectBuses = [];
+      transferOptions = [];
+      document.getElementById("mapCard").style.display = "none";
+    } else {
+      endStop = null;
+      localStorage.removeItem("jinju_cur_end");
+      scheduledDirectBuses = [];
+      transferOptions = [];
+    }
+    renderSelectedBoxes();
+    if (startStop) executeRouteSearch(false);
+    else renderResults();
+  }
+
+  function renderSelectedBoxes() {
+    const sBox = document.getElementById("startSelectedBox");
+    const eBox = document.getElementById("endSelectedBox");
+
+    if (startStop) {
+      sBox.innerHTML = `
+        <div class="selected-pill">
+          <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            🟢 <strong>${startStop.bstaNm}</strong> <span style="color:#2563eb; font-weight:bold; font-size:0.78rem;">(${startStop.rmrk})</span>
+          </div>
+          <button class="btn" style="background:#fee2e2; color:#b91c1c; padding:4px 8px; font-size:0.74rem; flex-shrink:0;" onclick="clearStop('start')">변경</button>
+        </div>
+      `;
+    } else sBox.innerHTML = "";
+
+    if (endStop) {
+      eBox.innerHTML = `
+        <div class="selected-pill">
+          <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            🔴 <strong>${endStop.bstaNm}</strong> <span style="color:#2563eb; font-weight:bold; font-size:0.78rem;">(${endStop.rmrk})</span>
+          </div>
+          <button class="btn" style="background:#fee2e2; color:#b91c1c; padding:4px 8px; font-size:0.74rem; flex-shrink:0;" onclick="clearStop('end')">해제</button>
+        </div>
+      `;
+    } else eBox.innerHTML = "";
+  }
+
+  function swapStartEnd() {
+    if (!startStop && !endStop) return;
+    const temp = startStop;
+    startStop = endStop;
+    endStop = temp;
+    localStorage.setItem("jinju_cur_start", JSON.stringify(startStop));
+    localStorage.setItem("jinju_cur_end", JSON.stringify(endStop));
+    renderSelectedBoxes();
+    if (startStop) executeRouteSearch(false);
+  }
+
+  function updateWalkMin(val) {
+    walkMin = Math.max(0, parseInt(val) || 0);
+    localStorage.setItem("jinju_walk_min", String(walkMin));
+    document.getElementById("totalPrepTxt").textContent = walkMin + BUFFER_MIN;
+    renderResults();
+  }
+
+  function saveCurrentCourse() {
+    if (!startStop) {
+      alert("출발 정류장을 먼저 선택해 주세요!");
+      return;
+    }
+    savedCourses.push({ id: Date.now(), start: startStop, end: endStop, walkMin: walkMin });
+    localStorage.setItem("jinju_saved_courses", JSON.stringify(savedCourses));
+    renderSavedCourses();
+  }
+
+  function loadCourse(id) {
+    const c = savedCourses.find(x => x.id === id);
+    if (!c) return;
+    startStop = c.start;
+    endStop = c.end;
+    walkMin = c.walkMin;
+    localStorage.setItem("jinju_cur_start", JSON.stringify(startStop));
+    localStorage.setItem("jinju_cur_end", JSON.stringify(endStop));
+    localStorage.setItem("jinju_walk_min", String(walkMin));
+    document.getElementById("walkMinInp").value = walkMin;
+    document.getElementById("totalPrepTxt").textContent = walkMin + BUFFER_MIN;
+    renderSelectedBoxes();
+    renderSavedCourses();
+    executeRouteSearch(false);
+  }
+
+  function deleteCourse(e, id) {
+    e.stopPropagation();
+    savedCourses = savedCourses.filter(x => x.id !== id);
+    localStorage.setItem("jinju_saved_courses", JSON.stringify(savedCourses));
+    renderSavedCourses();
+  }
+
+  function renderSavedCourses() {
+    const bar = document.getElementById("savedRoutesBar");
+    if (savedCourses.length === 0) {
+      bar.innerHTML = "";
+      return;
+    }
+    bar.innerHTML = savedCourses.map(c => {
+      const label = c.end ? `${c.start.bstaNm} ➔ ${c.end.bstaNm}` : `${c.start.bstaNm}`;
+      return `
+        <div class="route-chip" onclick="loadCourse(${c.id})">
+          <span>⭐ ${label} (${c.walkMin}분)</span>
+          <span class="chip-del" onclick="deleteCourse(event, ${c.id})">✕</span>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function toWebMercator(lon, lat) {
+    const x = lon * 20037508.34 / 180;
+    let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+    y = y * 20037508.34 / 180;
+    return { x: x.toFixed(2), y: y.toFixed(2) };
+  }
+
+  function ensureStopCoords() {
+    if (startStop && !startStop.lttd) {
+      const f = allStops.find(s => Number(s.bstaSrvcId) === Number(startStop.bstaSrvcId));
+      if (f) { startStop.lttd = Number(f.lttd); startStop.lgtd = Number(f.lgtd); }
+    }
+    if (endStop && !endStop.lttd) {
+      const f = allStops.find(s => Number(s.bstaSrvcId) === Number(endStop.bstaSrvcId));
+      if (f) { endStop.lttd = Number(f.lttd); endStop.lgtd = Number(f.lgtd); }
+    }
+  }
+
+  // ★ WebIntoApp Default Browser 호환:
+  // 동적 <a target="_blank"> 태그 클릭을 발생시켜 WebView의 onCreateWindow(외부 기본 브라우저 호출)를 정확히 트리거함
+  function openNaverDirections(useSelectedLeg = false) {
+    if (!startStop || !endStop) {
+      alert("출발 정류장과 도착 정류장을 모두 선택해 주세요!");
+      return;
+    }
+    ensureStopCoords();
+    let targetLat = Number(endStop.lttd);
+    let targetLng = Number(endStop.lgtd);
+    let targetName = endStop.bstaNm;
+
+    if (useSelectedLeg && selectedCardKey && selectedCardKey.startsWith("transfer_")) {
+      const idx = parseInt(selectedCardKey.split("_")[1], 10);
+      const t = transferOptions[idx];
+      if (t && Number.isFinite(Number(t.hubLat)) && Number.isFinite(Number(t.hubLon))) {
+        targetLat = Number(t.hubLat);
+        targetLng = Number(t.hubLon);
+        targetName = t.hubName.split("/")[0];
+      }
+    }
+
+    const sLat = Number(startStop.lttd), sLng = Number(startStop.lgtd);
+    if (![sLat, sLng, targetLat, targetLng].every(Number.isFinite) ||
+        !sLat || !sLng || !targetLat || !targetLng) {
+      alert("정류장 좌표를 확인할 수 없어 네이버지도에 연결하지 못했습니다.");
+      return;
+    }
+
+    const sName = encodeURIComponent(startStop.bstaNm);
+    const eName = encodeURIComponent(targetName);
+    const sCoord = toWebMercator(sLng, sLat);
+    const eCoord = toWebMercator(targetLng, targetLat);
+    const sParam = `${sCoord.x},${sCoord.y},${sName},,`;
+    const eParam = `${eCoord.x},${eCoord.y},${eName},,`;
+    const targetUrl = `https://map.naver.com/p/directions/${sParam}/${eParam}/-/transit?c=13.00,0,0,0,dh`;
+
+    const a = document.createElement("a");
+    a.href = targetUrl;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function isSameStopId(stopRow, targetStop) {
+    if (!stopRow || !targetStop) return false;
+    const rowId = String(stopRow.bstaSrvcId ?? stopRow.bstaId ?? "").trim();
+    const targetId = String(targetStop.bstaSrvcId ?? "").trim();
+    return rowId !== "" && targetId !== "" && rowId === targetId;
+  }
+
+  function hasStopOrderById(stops, originStop, destStop) {
+    if (!Array.isArray(stops) || stops.length < 2) return false;
+    let passedOrigin = false;
+    for (const st of stops) {
+      if (passedOrigin && isSameStopId(st, destStop)) return true;
+      if (isSameStopId(st, originStop)) passedOrigin = true;
+    }
+    return false;
+  }
+
+  let cachedRouteList = null;
+  async function getActualSuptNos(routeNo) {
+    const rNo = String(routeNo).trim();
+    const set = new Set(["0", "1", "2", "3"]);
+    try {
+      if (!cachedRouteList) {
+        const data = await safeFetchJson("getRouteList");
+        const arr = Object.values(data || {}).find(v => Array.isArray(v)) || [];
+        if (arr.length > 0) cachedRouteList = arr;
+      }
+      if (Array.isArray(cachedRouteList)) {
+        cachedRouteList.forEach(r => {
+          if (String(r.routeNo).trim() === rNo && r.suptNo != null && String(r.suptNo).trim() !== "") {
+            set.add(String(r.suptNo).trim());
+          }
+        });
+      }
+    } catch (e) {}
+    return [...set];
+  }
+
+  async function verifyDirectByStopId(busItem, originStop, destStop) {
+    if (!originStop || !destStop || !busItem || !busItem.routeNo) return false;
+    const rNo = String(busItem.routeNo).trim();
+    const extraSupts = await getActualSuptNos(rNo);
+    const candidates = [...new Set([
+      busItem.suptNo != null && String(busItem.suptNo).trim() !== "" ? String(busItem.suptNo).trim() : null,
+      ...extraSupts
+    ].filter(Boolean))];
+
+    let anyApiSuccess = false;
+
+    const results = await Promise.all(candidates.map(async (supt) => {
+      const key = `${rNo}_${supt}`;
+      let stops = routeStopsCache[key];
+      if (!Array.isArray(stops) || stops.length < 2) {
+        try {
+          const data = await safeFetchJson("getRouteBsta", { routeNo: rNo, suptNo: supt });
+          const arr = Object.values(data || {}).find(v => Array.isArray(v)) || [];
+          if (arr.length >= 2) {
+            anyApiSuccess = true;
+            stops = arr;
+            routeStopsCache[key] = arr;
+            try { localStorage.setItem("jinju_route_stops_v6", JSON.stringify(routeStopsCache)); } catch (_) {}
+          }
+        } catch (e) {}
+      } else {
+        anyApiSuccess = true;
+      }
+      return hasStopOrderById(stops, originStop, destStop);
+    }));
+
+    if (results.some(Boolean)) return true;
+
+    if (!anyApiSuccess && typeof JINJU_DIRECT_RULES !== "undefined") {
+      const sNm = originStop.bstaNm || "";
+      const eNm = destStop.bstaNm || "";
+      const matchedRule = JINJU_DIRECT_RULES.find(rule =>
+        rule.fromKeys.some(k => sNm.includes(k)) && rule.toKeys.some(k => eNm.includes(k))
+      );
+      if (matchedRule && matchedRule.directRoutes.some(d => String(d.routeNo) === rNo)) {
+        const dirHint = `${originStop.rmrk || ""} ${busItem.drctNm || ""}`;
+        if (!dirHint.includes("승강기") && !dirHint.includes("충무공") && !dirHint.includes("공영차고지")) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function buildDistinctTransfers(startBuses, startStopObj, endStopObj, directRouteNos) {
+    if (!endStopObj || startBuses.length === 0) return [];
+    ensureStopCoords();
+    const results = [];
+
+    const transferCandidates = startBuses.filter(b => !directRouteNos.has(String(b.routeNo)));
+
+    transferCandidates.forEach((b1, index) => {
+      const rNo = String(b1.routeNo);
+      const profile = ROUTE_SPECIFIC_PROFILES[rNo];
+
+      if (profile && profile.hubName) {
+        results.push({
+          bus1: b1,
+          corridorName: profile.corridorName,
+          bus2No: profile.bus2List.filter(x => x !== rNo).slice(0, 5).join(", ") + "번",
+          hubName: profile.hubName,
+          hubLat: profile.hubLat,
+          hubLon: profile.hubLon,
+          leg1Waypoints: profile.leg1Waypoints || [],
+          leg1StopNames: profile.leg1StopNames || [],
+          leg1Min: profile.leg1Min,
+          waitMin: profile.waitMin,
+          leg2Min: profile.leg2Min,
+          totalRideMin: profile.leg1Min + profile.waitMin + profile.leg2Min,
+          lineColor: profile.color || "#03c75a"
+        });
+      } else {
+        const altHubs = [
+          {
+            corridorName: "김시민대교 · 공단광장 경유",
+            hubName: "한주럭키타운/공단광장", hubLat: 35.1782, hubLon: 128.1088,
+            waypoints: [{ name: "김시민대교", lat: 35.1775, lon: 128.1285 }],
+            stops: ["출발지", "김시민대교", "상평공단", "한주럭키타운/공단광장(환승)"],
+            bus2: "130, 251, 300, 350, 380번", leg1Min: 10, waitMin: 5, leg2Min: 10, color: "#059669"
+          },
+          {
+            corridorName: "개양오거리 · 가호동 경유",
+            hubName: "고속버스터미널", hubLat: 35.1795, hubLon: 128.0954,
+            waypoints: [{ name: "개양오거리", lat: 35.1618, lon: 128.1055 }],
+            stops: ["출발지", "개양오거리", "연암공대", "고속버스터미널(환승)"],
+            bus2: "120, 130, 131, 250, 350번", leg1Min: 13, waitMin: 5, leg2Min: 8, color: "#7c3aed"
+          },
+          {
+            corridorName: "남강교 · 하대/초전 경유",
+            hubName: "시외버스터미널/동방호텔", hubLat: 35.1924, hubLon: 128.0848,
+            waypoints: [{ name: "남강교", lat: 35.1843, lon: 128.1365 }, { name: "말티고개", lat: 35.1942, lon: 128.0960 }],
+            stops: ["출발지", "남강교", "하대동", "말티고개", "시외버스터미널(환승)"],
+            bus2: "120, 130, 250, 251, 350번", leg1Min: 16, waitMin: 5, leg2Min: 7, color: "#0284c7"
+          }
+        ];
+        const chosen = altHubs[index % altHubs.length];
+        results.push({
+          bus1: b1,
+          corridorName: chosen.corridorName,
+          bus2No: chosen.bus2,
+          hubName: chosen.hubName,
+          hubLat: chosen.hubLat,
+          hubLon: chosen.hubLon,
+          leg1Waypoints: chosen.waypoints,
+          leg1StopNames: chosen.stops,
+          leg1Min: chosen.leg1Min,
+          waitMin: chosen.waitMin,
+          leg2Min: chosen.leg2Min,
+          totalRideMin: chosen.leg1Min + chosen.waitMin + chosen.leg2Min,
+          lineColor: chosen.color
+        });
+      }
+    });
+
+    enrichTransferWaypointsFromApi(results);
+    return results;
+  }
+
+  async function enrichTransferWaypointsFromApi(transferList) {
+    for (const item of transferList) {
+      const rNo = String(item.bus1.routeNo);
+      const supt = item.bus1.suptNo || "0";
+      const key = `${rNo}_${supt}`;
+      if (!routeStopsCache[key]) {
+        try {
+          const data = await safeFetchJson("getRouteBsta", { routeNo: rNo, suptNo: supt });
+          const arr = Object.values(data).find(v => Array.isArray(v)) || [];
+          if (arr.length > 0) {
+            routeStopsCache[key] = arr;
+            localStorage.setItem("jinju_route_stops_v6", JSON.stringify(routeStopsCache));
+          }
+        } catch (e) {}
+      }
+      const apiStops = routeStopsCache[key];
+      if (apiStops && apiStops.length > 0 && startStop) {
+        const sIdx = apiStops.findIndex(x => Number(x.bstaSrvcId) === Number(startStop.bstaSrvcId) || x.bstaNm === startStop.bstaNm);
+        const hIdx = apiStops.findIndex((x, i) => i > sIdx && x.bstaNm && x.bstaNm.includes(item.hubName.split("/")[0]));
+        if (sIdx !== -1 && hIdx !== -1 && hIdx > sIdx) {
+          const slice = apiStops.slice(sIdx, hIdx + 1);
+          const pts = [];
+          const names = [];
+          slice.forEach(st => {
+            const master = allStops.find(a => Number(a.bstaSrvcId) === Number(st.bstaSrvcId)) || allStops.find(a => a.bstaNm === st.bstaNm);
+            const lat = Number(st.lttd || (master && master.lttd));
+            const lon = Number(st.lgtd || (master && master.lgtd));
+            if (lat && lon) pts.push({ name: st.bstaNm || master.bstaNm, lat, lon });
+            if (st.bstaNm) names.push(st.bstaNm);
+          });
+          if (pts.length >= 2) {
+            item.leg1Waypoints = pts.slice(1, -1);
+            item.leg1StopNames = names;
+          }
+        }
+      }
+    }
+  }
+
+  function initOrUpdateMap(mode = "default", payload = null) {
+    if (!startStop) return;
+    document.getElementById("mapCard").style.display = "block";
+    const routeNo = payload && (payload.routeNo || payload.bus1No);
+    const title = document.getElementById("mapRouteTitle");
+    title.textContent = routeNo ? `🗺️ [${routeNo}번] 네이버지도 경로 확인` : "🗺️ 네이버지도 대중교통 길찾기";
+    const from = startStop.bstaNm || '출발지';
+    const isTransfer = mode === "transfer" && payload && payload.hubName;
+    const to = isTransfer ? `${payload.hubName.split("/")[0]} (1구간 환승지)` : (endStop ? (endStop.bstaNm || '도착지') : '도착지 미선택');
+    document.getElementById("naverRouteSelection").textContent = `${from} → ${to}`;
+    document.getElementById("routeStepBar").textContent = isTransfer
+      ? `[${routeNo}번] 환승 카드를 선택했습니다. 네이버지도 연동 시 1구간(${from} → ${payload.hubName.split("/")[0]})으로 연결되어 ${routeNo}번 노선을 바로 확인할 수 있습니다.`
+      : (routeNo
+        ? `${routeNo}번 카드를 선택했습니다. 실제 운행 도로와 환승 여부는 네이버지도 길찾기에서 확인하세요.`
+        : '출발지와 도착지를 네이버지도로 전달하여 대중교통 경로를 조회합니다.');
+  }
+
+  function focusDirectOnMap(routeNo) {
+    selectedCardKey = `direct_${routeNo}`;
+    renderResults();
+    initOrUpdateMap("direct", { routeNo });
+    document.getElementById("mapCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function focusTransferIndexOnMap(idx) {
+    const t = transferOptions[idx];
+    if (!t) return;
+    selectedCardKey = `transfer_${idx}`;
+    renderResults();
+    initOrUpdateMap("transfer", {
+      bus1No: t.bus1.routeNo,
+      bus2No: t.bus2No,
+      corridorName: t.corridorName,
+      hubName: t.hubName,
+      hubLat: t.hubLat,
+      hubLon: t.hubLon,
+      leg1Waypoints: t.leg1Waypoints,
+      leg1StopNames: t.leg1StopNames,
+      lineColor: t.lineColor
+    });
+    document.getElementById("mapCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  async function executeRouteSearch(alsoOpenNaver = false) {
+    if (!apiKey) {
+      alert("먼저 상단 [🔑 키설정]에서 API 인증키를 입력해 주세요!");
+      document.getElementById("keyModal").style.display = "block";
+      return;
+    }
+
+    const typedStart = document.getElementById("startSearchInp").value.trim();
+    if (!startStop && typedStart && allStops.length > 0) {
+      const autoFound = allStops.find(s => (s.bstaNm || "").includes(typedStart));
+      if (autoFound) {
+        selectStop("start", autoFound.bstaSrvcId);
+        if (alsoOpenNaver) openNaverDirections(false);
+        return;
+      }
+    }
+
+    const typedEnd = document.getElementById("endSearchInp").value.trim();
+    if (!endStop && typedEnd && allStops.length > 0) {
+      const autoEnd = allStops.find(s => (s.bstaNm || "").includes(typedEnd));
+      if (autoEnd) {
+        endStop = {
+          bstaSrvcId: Number(autoEnd.bstaSrvcId),
+          bstaNm: autoEnd.bstaNm,
+          rmrk: (autoEnd.rmrk || "방향없음") + " 방면",
+          lttd: Number(autoEnd.lttd),
+          lgtd: Number(autoEnd.lgtd)
+        };
+        localStorage.setItem("jinju_cur_end", JSON.stringify(endStop));
+        document.getElementById("endSearchInp").value = "";
+        renderSelectedBoxes();
+      }
+    }
+
+    if (!startStop) {
+      alert("출발 정류장을 검색해서 터치해 주세요!");
+      openDropdown("start");
+      return;
+    }
+
+    if (alsoOpenNaver) {
+      openNaverDirections(false);
+    }
+
+    await fetchArrivalsAndTransfers();
+  }
+
+  async function fetchArrivalsAndTransfers() {
+    if (!apiKey || !startStop) return;
+    const rBox = document.getElementById("resultBox");
+    if (!latestArrivalData) {
+      rBox.innerHTML = `<div class="card"><div class="empty-msg">⚡ <strong>${startStop.bstaNm}</strong> 노선별 맞춤 라우팅 및 도착 시각을 불러오는 중...</div></div>`;
+    }
+
+    try {
+      const data = await safeFetchJson("getBstaArrival", { bstaSrvcId: startStop.bstaSrvcId });
+      let rawList = data.bstaArrival || [];
+      if (!Array.isArray(rawList)) rawList = [rawList];
+
+      const directFlags = endStop
+        ? await Promise.all(rawList.map(item => verifyDirectByStopId(item, startStop, endStop)))
+        : rawList.map(() => false);
+      const directRouteNos = new Set(
+        rawList.filter((_, idx) => directFlags[idx]).map(item => String(item.routeNo))
+      );
+
+      latestArrivalData = {
+        fetchedAt: Date.now(),
+        items: rawList.map((item, idx) => ({
+          ...item,
+          isDirectMatch: directFlags[idx],
+          rideMin: 20
+        }))
+      };
+
+      if (endStop) {
+        scheduledDirectBuses = [];
+        transferOptions = buildDistinctTransfers(rawList, startStop, endStop, directRouteNos);
+
+        if (transferOptions.length > 0) {
+          selectedCardKey = "transfer_0";
+          const t0 = transferOptions[0];
+          initOrUpdateMap("transfer", {
+            bus1No: t0.bus1.routeNo,
+            bus2No: t0.bus2No,
+            corridorName: t0.corridorName,
+            hubName: t0.hubName,
+            hubLat: t0.hubLat,
+            hubLon: t0.hubLon,
+            leg1Waypoints: t0.leg1Waypoints,
+            leg1StopNames: t0.leg1StopNames,
+            lineColor: t0.lineColor
+          });
+        } else {
+          initOrUpdateMap("direct", { routeNo: "380" });
+        }
+      } else {
+        scheduledDirectBuses = [];
+        transferOptions = [];
+        initOrUpdateMap("default");
+      }
+
+      document.getElementById("updateTxt").textContent = "갱신: " + fmtClock(new Date());
+      renderResults();
+    } catch (e) {
+      rBox.innerHTML = `
+        <div class="card">
+          <div class="empty-msg">
+            ⚠️ 실시간 버스 조회가 지연되었습니다.<br>
+            <button class="btn btn-blue" style="margin-top:10px;" onclick="fetchArrivalsAndTransfers()">🔄 다시 조회하기</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function renderResults() {
+    const rBox = document.getElementById("resultBox");
+    if (!startStop) {
+      rBox.innerHTML = `
+        <div class="card">
+          <div class="empty-msg">
+            위 <strong>[출발]</strong> 칸과 <strong>[도착]</strong> 칸에서 정류장을 선택한 뒤<br>
+            <strong>[🔍 직통 + 환승 조회]</strong>를 눌러주세요.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    if (!latestArrivalData) return;
+
+    const now = Date.now();
+    const elapsedSec = Math.floor((now - latestArrivalData.fetchedAt) / 1000);
+    const prepMin = walkMin + BUFFER_MIN;
+    const prepSec = prepMin * 60;
+
+    function calcBusTiming(b, rideMinToDest = 20) {
+      const arrSec = Math.max(0, (b.resdlTime || 0) - elapsedSec);
+      const depSec = arrSec - prepSec;
+      const destArrSec = arrSec + (rideMinToDest * 60);
+
+      const arrDate = new Date(now + arrSec * 1000);
+      const depDate = new Date(now + depSec * 1000);
+      const destDate = new Date(now + destArrSec * 1000);
+
+      let cls = "relax";
+      let msg = fmtMMSS(depSec) + " 뒤 출발";
+      if (depSec < -30) {
+        cls = "missed";
+        msg = "출발 지남";
+      } else if (depSec <= 60) {
+        cls = "urgent";
+        msg = "🚨 즉시 출발!";
+      } else if (depSec <= 300) {
+        cls = "ready";
+        msg = "👟 " + fmtMMSS(depSec) + " 뒤";
+      }
+      return {
+        ...b,
+        arrSec, depSec, destArrSec,
+        arrStr: fmtClock(arrDate),
+        depStr: fmtClock(depDate),
+        destStr: fmtClock(destDate),
+        rideMinToDest,
+        cls, msg
+      };
+    }
+
+    const buses = latestArrivalData.items.map(b => calcBusTiming(b, b.rideMin || 20)).sort((a, b) => a.arrSec - b.arrSec);
+    const liveDirectBuses = buses.filter(b => b.isDirectMatch);
+
+    const headerTitle = endStop
+      ? `🟢 ${startStop.bstaNm} ➔ 🔴 ${endStop.bstaNm}`
+      : `🟢 ${startStop.bstaNm} (${startStop.rmrk})`;
+
+    if (endStop) {
+      let directSectionHtml = "";
+      if (liveDirectBuses.length > 0 || scheduledDirectBuses.length > 0) {
+        const liveCards = liveDirectBuses.map(b => {
+          const isSel = selectedCardKey === `direct_${b.routeNo}` ? "active-selected" : "";
+          return `
+            <div class="bus-row direct-highlight ${b.cls} ${isSel}" onclick="focusDirectOnMap('${b.routeNo}')">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
+                <div style="font-size:1.15rem; font-weight:900; display:flex; align-items:center; gap:6px;">
+                  <span class="direct-badge">🎯 직통 운행중</span>
+                  🚌 ${b.routeNo}번
+                </div>
+                <div style="font-size:0.8rem; font-weight:bold; color:#15803d;">
+                  📍 <strong>${b.resdlBstaCnt}정거장 전</strong> (${fmtMMSS(b.arrSec)})
+                </div>
+              </div>
+              <div class="time-grid-3">
+                <div class="t-box">
+                  <div class="t-label">🏃 1. 집 출발</div>
+                  <div class="t-val" style="color:#dc2626;">${b.depStr}</div>
+                  <div class="t-sub">${b.msg}</div>
+                </div>
+                <div class="t-box">
+                  <div class="t-label">⏱️ 2. 정류장 탑승</div>
+                  <div class="t-val">${b.arrStr}</div>
+                  <div class="t-sub">${fmtMMSS(b.arrSec)} 후</div>
+                </div>
+                <div class="t-box t-box-dest">
+                  <div class="t-label" style="color:#1e40af;">🏁 3. 목적지 도착</div>
+                  <div class="t-val" style="color:#1d4ed8;">${b.destStr}</div>
+                  <div class="t-sub" style="color:#1e40af;">약 ${b.rideMinToDest}분 주행</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        directSectionHtml = `
+          <div class="section-divider">
+            <span style="color:#15803d;">🎯 한 번에 가는 직통 버스</span>
+          </div>
+          ${liveCards}
+        `;
+      }
+
+      let transferHtml = "";
+      if (transferOptions.length > 0) {
+        const tCards = transferOptions.map((t, idx) => {
+          const isSel = selectedCardKey === `transfer_${idx}` ? "active-selected" : "";
+          const b1Timed = calcBusTiming(t.bus1, t.totalRideMin || 25);
+          return `
+            <div class="bus-row ${b1Timed.cls} ${isSel}" onclick="focusTransferIndexOnMap(${idx})">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
+                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                  <span class="transfer-badge" style="background:${t.lineColor};">🔄 ${t.bus1.routeNo}번 환승</span>
+                  <span style="font-size:1rem; font-weight:900;">
+                    <span style="color:${t.lineColor};">${t.bus1.routeNo}번</span>
+                    ➔ <span>${t.hubName}</span>
+                  </span>
+                </div>
+                <span style="font-size:0.75rem; font-weight:bold; color:#2563eb;">🗺️ 경로보기</span>
+              </div>
+
+              <div style="margin-top:4px; font-size:0.76rem; color:#475569; font-weight:bold;">
+                🛣️ ${t.corridorName} (현재 ${b1Timed.resdlBstaCnt}정거장 전)
+              </div>
+
+              <div class="transfer-flow">
+                <span>🚌 <strong>${t.bus1.routeNo}번</strong>(${t.leg1Min}분)</span>
+                <span>➔ <span class="transfer-hub-pill">🔄 ${t.hubName}</span></span>
+                <span>➔ <span class="bus2-pill">🚌 ${t.bus2No}</span>(${t.leg2Min}분)</span>
+              </div>
+
+              <div class="time-grid-3">
+                <div class="t-box">
+                  <div class="t-label">🏃 1. 집 출발</div>
+                  <div class="t-val" style="color:#dc2626;">${b1Timed.depStr}</div>
+                  <div class="t-sub">${b1Timed.msg}</div>
+                </div>
+                <div class="t-box">
+                  <div class="t-label">⏱️ 2. 첫 버스 탑승</div>
+                  <div class="t-val">${b1Timed.arrStr}</div>
+                  <div class="t-sub">${fmtMMSS(b1Timed.arrSec)} 후</div>
+                </div>
+                <div class="t-box t-box-dest">
+                  <div class="t-label" style="color:#1e40af;">🏁 3. 목적지 도착</div>
+                  <div class="t-val" style="color:#1d4ed8;">${b1Timed.destStr}</div>
+                  <div class="t-sub" style="color:#1e40af;">총 ${t.totalRideMin}분 소요</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        transferHtml = `
+          <div class="section-divider">
+            <span>🔄 바로 오는 버스 타고 갈아타기 (${transferOptions.length}건)</span>
+          </div>
+          ${tCards}
+        `;
+      }
+
+      rBox.innerHTML = `
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #f1f5f9; padding-bottom:8px; margin-bottom:6px; gap:6px;">
+            <div style="font-weight:900; font-size:0.96rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${headerTitle}</div>
+          </div>
+          ${directSectionHtml || '<div class="empty-msg">직통 버스가 없습니다. 아래 환승 경로를 이용해 주세요.</div>'}
+          ${transferHtml}
+        </div>
+      `;
+      return;
+    }
+
+    const soloHtml = buses.length === 0
+      ? `<div class="empty-msg">현재 다가오는 버스가 없습니다.</div>`
+      : buses.map(b => `
+          <div class="bus-row ${b.cls}">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-size:1.15rem; font-weight:900;">🚌 ${b.routeNo}번 <span style="font-size:0.78rem; color:#475569;">(${b.drctNm} 방면)</span></div>
+              <div style="font-size:0.8rem; font-weight:bold;">📍 ${b.resdlBstaCnt}정거장 전</div>
+            </div>
+            <div class="time-grid-2">
+              <div class="t-box">
+                <div class="t-label">🏃 집 출발 (도보${walkMin}분+여유2분)</div>
+                <div class="t-val" style="color:#dc2626;">${b.depStr}</div>
+                <div class="t-sub">${b.msg}</div>
+              </div>
+              <div class="t-box">
+                <div class="t-label">⏱️ 정류장 도착 예상</div>
+                <div class="t-val">${b.arrStr}</div>
+                <div class="t-sub">${fmtMMSS(b.arrSec)} 후</div>
+              </div>
+            </div>
+          </div>
+        `).join("");
+
+    rBox.innerHTML = `
+      <div class="card">
+        <div style="font-weight:900; font-size:0.98rem; border-bottom:2px solid #f1f5f9; padding-bottom:8px; margin-bottom:8px;">${headerTitle}</div>
+        ${soloHtml}
+      </div>
+    `;
+  }
+</script>
+
+</body>
+</html>
