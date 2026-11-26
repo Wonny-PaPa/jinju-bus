@@ -7,8 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#1e293b">
   <title>진주 버스 타이머</title>
+  <meta name="description" content="진주시 버스 도착정보와 정류장 고유번호 기반 직통·환승 안내">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="icon" type="image/png" href="./icon.png">
-  <link rel="apple-touch-icon" href="./icon.png">
   <link rel="shortcut icon" href="./icon.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -390,6 +393,7 @@
     <div id="loadStateTxt" style="font-size:0.8rem; color:#2563eb; font-weight:bold; margin-top:8px;"></div>
   </div>
 
+
   <div id="savedRoutesBar" class="saved-routes"></div>
 
   <div class="route-finder">
@@ -443,7 +447,8 @@
     <div id="naverRoutePanel" style="padding:22px 14px; border:1px solid #bbf7d0; border-radius:12px; background:#f0fdf4; text-align:center;">
       <div style="font-size:1.08rem;font-weight:900;color:#166534;margin-bottom:8px;">🗺️ 네이버지도에서 실제 대중교통 경로 확인</div>
       <div id="naverRouteSelection" style="font-size:0.84rem;line-height:1.6;color:#334155;margin-bottom:12px;"></div>
-      <button class="btn btn-naver" style="width:100%;font-size:0.95rem;padding:13px 10px;" onclick="openNaverDirections(true)">↗ 네이버지도 대중교통 길찾기 열기</button>
+      <button class="btn btn-naver" style="width:100%;font-size:0.95rem;padding:13px 10px;" onclick="openNaverDirections(true)">↗ 네이버지도 앱으로 길찾기</button>
+      <button type="button" class="btn" style="margin-top:8px;width:100%;padding:10px;border:1px solid #a7cfc0;background:#fff;color:#17664a;" onclick="openNaverDirectionsWeb(true)">🌐 앱이 열리지 않으면 웹으로 보기</button>
       <div style="font-size:0.76rem;color:#64748b;line-height:1.5;margin-top:10px;">네이버지도에서 실제 추천 노선과 운행 경로를 확인하세요. 앱에서 선택한 버스 번호가 네이버지도에 자동 지정되지는 않습니다.</div>
     </div>
     <div id="routeStepBar" class="route-step-bar">
@@ -930,12 +935,13 @@
     }
   }
 
-  // ★ WebIntoApp Default Browser 호환:
-  // 동적 <a target="_blank"> 태그 클릭을 발생시켜 WebView의 onCreateWindow(외부 기본 브라우저 호출)를 정확히 트리거함
-  function openNaverDirections(useSelectedLeg = false) {
+  // 네이버 공식 지도 URL Scheme: 대중교통 길찾기를 네이버지도 앱에서 실행.
+  // Android Chrome은 intent URI + 웹 fallback, 다른 모바일은 nmap://, PC는 웹으로 연결.
+  // 기존 선택 환승의 1구간 목적지 선택 로직은 그대로 유지한다.
+  function buildNaverDirectionsLinks(useSelectedLeg = false) {
     if (!startStop || !endStop) {
       alert("출발 정류장과 도착 정류장을 모두 선택해 주세요!");
-      return;
+      return null;
     }
     ensureStopCoords();
     let targetLat = Number(endStop.lttd);
@@ -951,12 +957,11 @@
         targetName = t.hubName.split("/")[0];
       }
     }
-
     const sLat = Number(startStop.lttd), sLng = Number(startStop.lgtd);
     if (![sLat, sLng, targetLat, targetLng].every(Number.isFinite) ||
         !sLat || !sLng || !targetLat || !targetLng) {
       alert("정류장 좌표를 확인할 수 없어 네이버지도에 연결하지 못했습니다.");
-      return;
+      return null;
     }
 
     const sName = encodeURIComponent(startStop.bstaNm);
@@ -965,15 +970,56 @@
     const eCoord = toWebMercator(targetLng, targetLat);
     const sParam = `${sCoord.x},${sCoord.y},${sName},,`;
     const eParam = `${eCoord.x},${eCoord.y},${eName},,`;
-    const targetUrl = `https://map.naver.com/p/directions/${sParam}/${eParam}/-/transit?c=13.00,0,0,0,dh`;
+    // 네이버지도 웹 경로는 기존 앱이 사용하던 형식을 유지한다.
+    const webUrl = `https://map.naver.com/p/directions/${sParam}/${eParam}/-/transit?c=13.00,0,0,0,dh`;
+    const qs = `slat=${sLat}&slng=${sLng}&sname=${sName}&dlat=${targetLat}&dlng=${targetLng}&dname=${eName}&appname=jinju.bus.pwa`;
+    const appUrl = `nmap://route/public?${qs}`;
+    const intentUrl = `intent://route/public?${qs}#Intent;scheme=nmap;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=com.nhn.android.nmap;S.browser_fallback_url=${encodeURIComponent(webUrl)};end`;
+    return { webUrl, appUrl, intentUrl };
+  }
 
-    const a = document.createElement("a");
-    a.href = targetUrl;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  function openNaverDirections(useSelectedLeg = false) {
+    const links = buildNaverDirectionsLinks(useSelectedLeg);
+    if (!links) return;
+    const ua = navigator.userAgent || "";
+    const android = /Android/i.test(ua);
+    const ios = /iPhone|iPad|iPod/i.test(ua);
+
+    if (android && /Chrome\//i.test(ua) && !/SamsungBrowser|EdgA|OPR\//i.test(ua)) {
+      // Chrome에서는 일반 웹 URL을 새 탭에 여는 대신 네이버지도 패키지에 전달.
+      // 미설치/호출 실패는 intent URI의 browser_fallback_url에서 처리.
+      window.location.href = links.intentUrl;
+      return;
+    }
+    if (android || ios) {
+      let leftPage = false;
+      const onLeave = () => { if (document.visibilityState === 'hidden') leftPage = true; };
+      document.addEventListener('visibilitychange', onLeave);
+      window.addEventListener('pagehide', onLeave, { once: true });
+      // 앱 호출 실패 시 1.8초 후 웹 경로로 전환. 사용자 탭 이벤트 내부에서 호출한다.
+      window.location.href = links.appUrl;
+      setTimeout(() => {
+        document.removeEventListener('visibilitychange', onLeave);
+        if (!leftPage && document.visibilityState === 'visible') {
+          window.location.assign(links.webUrl);
+        }
+      }, 1800);
+      return;
+    }
+    openNaverDirectionsWeb(useSelectedLeg, links);
+  }
+
+  function openNaverDirectionsWeb(useSelectedLeg = false, prebuilt = null) {
+    const links = prebuilt || buildNaverDirectionsLinks(useSelectedLeg);
+    if (!links) return;
+    // 직접 클릭되는 웹 fallback: 네이버지도 앱이 설치되지 않았거나 앱 링크 차단 시 사용.
+    const link = document.createElement('a');
+    link.href = links.webUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }
 
   function isSameStopId(stopRow, targetStop) {
@@ -1540,6 +1586,7 @@
     `;
   }
 </script>
+
 
 </body>
 </html>
